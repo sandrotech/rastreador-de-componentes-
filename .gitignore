@@ -1,0 +1,23 @@
+# Dependências
+node_modules/
+
+# Build gerado pelo electron-builder
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cache do electron-builder
+.cache/
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Variáveis de ambiente
+.env
+.env.local
+
+# VS Code
+.vscode/

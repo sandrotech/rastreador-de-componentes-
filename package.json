@@ -1,0 +1,73 @@
+{
+  "name": "devlens",
+  "version": "1.0.0",
+  "description": "Browser desktop para desenvolvimento web com IA — identifica arquivos-fonte pelo DOM",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win"
+  },
+  "keywords": [
+    "electron",
+    "devtools",
+    "web",
+    "inspector"
+  ],
+  "author": "DevLens",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "source-map": "^0.7.4"
+  },
+  "build": {
+    "appId": "com.devlens.app",
+    "productName": "DevLens",
+    "copyright": "Copyright © 2024 DevLens",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "webview-preload.js",
+      "src/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DevLens",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "portable": {
+      "artifactName": "DevLens-Portable-${version}.exe"
+    }
+  }
+}
