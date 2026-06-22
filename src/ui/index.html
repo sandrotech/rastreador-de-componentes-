@@ -37,6 +37,14 @@
     </div>
   </div>
 
+  <!-- ── Tabs Bar ───────────────────────────────────────────────────────── -->
+  <div id="tabs-bar">
+    <div id="tabs-list"></div>
+    <button id="btn-add-tab" title="Nova Aba">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+
   <!-- ── Toolbar ────────────────────────────────────────────────────────── -->
   <div id="toolbar">
     <!-- Navigation -->
@@ -122,6 +130,14 @@
       </svg>
       <span>DevTools</span>
     </button>
+
+    <!-- Project Folder -->
+    <button id="btn-project" title="Vincular pasta do projeto local para autodetecção de arquivos em React 19">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <span id="project-label">Vincular Pasta</span>
+    </button>
   </div>
 
   <!-- ── Webview ─────────────────────────────────────────────────────────── -->
@@ -152,14 +168,6 @@
         </div>
       </div>
     </div>
-
-    <webview 
-      id="webview" 
-      src="about:blank" 
-      allowpopups 
-      nodeintegration="false"
-      webpreferences="contextIsolation=true, sandbox=true">
-    </webview>
   </div>
 
   <!-- ── Info Bar (aparece quando elemento é inspecionado) ──────────────── -->
@@ -171,6 +179,7 @@
         <span id="info-separator" class="hidden">·</span>
         <span id="info-filepath" class="mono">Passe o mouse sobre um elemento</span>
         <span id="info-line" class="mono hidden"></span>
+        <button id="btn-quick-project" class="quick-project-btn hidden" title="Vincular pasta do projeto para achar o arquivo deste componente">Vincular Pasta</button>
       </div>
     </div>
     <div id="info-right">

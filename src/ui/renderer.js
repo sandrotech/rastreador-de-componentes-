@@ -1,33 +1,32 @@
 /**
  * renderer.js — Lógica da UI principal do DevLens
- *
- * Responsabilidades:
- *  - Navegação de URL na webview
- *  - Ativar/desativar o inspector (injeta inspector.js na webview)
- *  - Receber dados do elemento inspecionado e exibir na info bar
- *  - Copiar caminho do arquivo para a área de transferência
- *  - Atalho de teclado Ctrl+I para toggle do inspector
  */
 
 'use strict'
 
 // ─── Referências do DOM ──────────────────────────────────────────────────────
 
-const webview       = document.getElementById('webview')
-const startScreen   = document.getElementById('start-screen')
-const urlInput      = document.getElementById('url-input')
-const btnGo         = document.getElementById('btn-go')
-const btnBack       = document.getElementById('btn-back')
-const btnForward    = document.getElementById('btn-forward')
-const btnReload     = document.getElementById('btn-reload')
-const btnClearCache = document.getElementById('btn-clear-cache')
-const btnInspect    = document.getElementById('btn-inspect')
-const inspectLabel  = document.getElementById('inspect-label')
-const btnMobile     = document.getElementById('btn-mobile')
+const tabsList        = document.getElementById('tabs-list')
+const btnAddTab       = document.getElementById('btn-add-tab')
+const startScreen     = document.getElementById('start-screen')
+const urlInput        = document.getElementById('url-input')
+const btnGo           = document.getElementById('btn-go')
+const btnBack         = document.getElementById('btn-back')
+const btnForward      = document.getElementById('btn-forward')
+const btnReload       = document.getElementById('btn-reload')
+const btnClearCache   = document.getElementById('btn-clear-cache')
+const btnInspect      = document.getElementById('btn-inspect')
+const inspectLabel    = document.getElementById('inspect-label')
+const btnMobile       = document.getElementById('btn-mobile')
 const deviceSelectorWrapper = document.getElementById('device-selector-wrapper')
-const deviceSelector = document.getElementById('device-selector')
-const btnDevtools   = document.getElementById('btn-devtools')
+const deviceSelector  = document.getElementById('device-selector')
+const btnDevtools     = document.getElementById('btn-devtools')
 const webviewContainer = document.getElementById('webview-container')
+
+const btnProject      = document.getElementById('btn-project')
+const projectLabel    = document.getElementById('project-label')
+const btnQuickProject = document.getElementById('btn-quick-project')
+
 
 const infoBar          = document.getElementById('info-bar')
 const infoFramework    = document.getElementById('info-framework-badge')
@@ -48,6 +47,10 @@ const btnIntentCancel = document.getElementById('btn-intent-cancel')
 const btnIntentConfirm = document.getElementById('btn-intent-confirm')
 
 // ─── Estado ──────────────────────────────────────────────────────────────────
+
+let tabs = []
+let activeTabId = null
+let tabIdCounter = 0
 
 let inspectorActive = false
 let inspectorInjected = false
@@ -78,27 +81,157 @@ document.getElementById('btn-minimize').addEventListener('click', () => window.e
 document.getElementById('btn-maximize').addEventListener('click', () => window.electronAPI.maximizeWindow())
 document.getElementById('btn-close').addEventListener('click',    () => window.electronAPI.closeWindow())
 
+// ─── Lógica de Abas ───────────────────────────────────────────────────────────
+
+function getActiveTab() {
+  return tabs.find(t => t.id === activeTabId)
+}
+
+function getActiveWebview() {
+  const tab = getActiveTab()
+  return tab ? tab.webview : null
+}
+
+function createTab(initialUrl = 'about:blank', makeActive = true) {
+  tabIdCounter++
+  const id = tabIdCounter
+  const title = initialUrl === 'about:blank' ? 'Nova Aba' : 'Carregando...'
+
+  // Cria a Webview
+  const webview = document.createElement('webview')
+  webview.setAttribute('src', initialUrl)
+  webview.setAttribute('allowpopups', 'true')
+  webview.setAttribute('nodeintegration', 'false')
+  webview.setAttribute('webpreferences', 'contextIsolation=true, sandbox=true')
+  
+  // Esconde por padrão, só mostra quando for ativa
+  webview.classList.remove('active')
+  webviewContainer.appendChild(webview)
+
+  // Cria o elemento da aba
+  const tabEl = document.createElement('div')
+  tabEl.className = 'tab'
+  tabEl.innerHTML = `
+    <span class="tab-title">${title}</span>
+    <span class="tab-close">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </span>
+  `
+  tabsList.appendChild(tabEl)
+
+  const tabObj = { id, title, url: initialUrl, webview, tabEl }
+  tabs.push(tabObj)
+
+  // Eventos do elemento aba
+  tabEl.addEventListener('click', () => switchTab(id))
+  tabEl.querySelector('.tab-close').addEventListener('click', (e) => {
+    e.stopPropagation()
+    closeTab(id)
+  })
+
+  // Registra os listeners da webview
+  bindWebviewEvents(webview, id)
+
+  if (makeActive) {
+    switchTab(id)
+  }
+
+  updateStartScreen()
+  return id
+}
+
+function switchTab(id) {
+  const newTab = tabs.find(t => t.id === id)
+  if (!newTab) return
+
+  // Desativa tab anterior
+  const oldTab = getActiveTab()
+  if (oldTab) {
+    oldTab.tabEl.classList.remove('active')
+    oldTab.webview.classList.remove('active')
+  }
+
+  activeTabId = id
+  newTab.tabEl.classList.add('active')
+  
+  // Se for aba about:blank, podemos ocultar webview se quisermos,
+  // mas aqui deixamos visivel pq start screen gerencia isso.
+  newTab.webview.classList.add('active')
+
+  // Atualiza URL Input
+  urlInput.value = newTab.url === 'about:blank' ? '' : newTab.url
+
+  // Aplica as regras de mobile atuais para a nova aba
+  applyDeviceSettingsToWebview(newTab.webview)
+
+  // Atualiza botões
+  updateNavButtons()
+
+  // Se o inspector estava ativo e mudou de aba, idealmente desativamos globalmente
+  // ou poderíamos manter por aba, mas globalmente é mais simples:
+  if (inspectorActive) {
+    deactivateInspector(true)
+  }
+
+  updateStartScreen()
+}
+
+function closeTab(id) {
+  const index = tabs.findIndex(t => t.id === id)
+  if (index === -1) return
+  const tab = tabs[index]
+
+  // Remove DOM elements
+  tab.tabEl.remove()
+  tab.webview.remove()
+
+  tabs.splice(index, 1)
+
+  if (tabs.length === 0) {
+    // Se fechou tudo, cria uma aba vazia
+    createTab()
+  } else if (activeTabId === id) {
+    // Se fechou a aba ativa, ativa a aba à esquerda (ou à direita se não tiver esquerda)
+    const newActiveIndex = Math.max(0, index - 1)
+    switchTab(tabs[newActiveIndex].id)
+  }
+}
+
+btnAddTab.addEventListener('click', () => createTab())
+
+function updateStartScreen() {
+  const activeWv = getActiveWebview()
+  if (!activeWv || activeWv.src === 'about:blank' || !activeWv.src) {
+    startScreen.style.display = 'flex'
+    if (activeWv) activeWv.style.display = 'none'
+  } else {
+    startScreen.style.display = 'none'
+    if (activeWv) activeWv.style.display = '' // Deixa a classe .active gerenciar (display: flex)
+  }
+}
+
 // ─── Navegação ────────────────────────────────────────────────────────────────
 
 function navigate(rawUrl) {
   let url = rawUrl.trim()
   if (!url) return
 
-  // Adiciona protocolo se necessário
   if (!/^https?:\/\//i.test(url)) {
     url = 'http://' + url
   }
 
+  const tab = getActiveTab()
+  if (!tab) return
+
   urlInput.value = url
-
-  // Mostra a webview e esconde a tela inicial
+  tab.url = url
+  
+  // Atualiza start screen
   startScreen.style.display = 'none'
-  webview.style.display = 'flex'
+  tab.webview.style.display = '' // vai obedecer a classe .active
 
-  // Reseta o estado do inspector na navegação
   inspectorInjected = false
-
-  webview.src = url
+  tab.webview.setAttribute('src', url)
 }
 
 btnGo.addEventListener('click', () => navigate(urlInput.value))
@@ -107,81 +240,135 @@ urlInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') navigate(urlInput.value)
 })
 
-// Atalhos globais de teclado (F5, F12, Ctrl+Shift+I, Ctrl+L)
+// Atalhos globais de teclado
 document.addEventListener('keydown', (e) => {
+  const wv = getActiveWebview()
   if (e.key === 'F5') {
     e.preventDefault()
-    webview.reloadIgnoringCache()
+    if (wv) wv.reloadIgnoringCache()
   } else if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I') || (e.ctrlKey && e.shiftKey && e.key === 'i')) {
     e.preventDefault()
     toggleDevTools()
   } else if (e.ctrlKey && e.key === 'l') {
     e.preventDefault()
     urlInput.select()
+  } else if (e.ctrlKey && e.key === 't') {
+    e.preventDefault()
+    createTab()
+  } else if (e.ctrlKey && e.key === 'w') {
+    e.preventDefault()
+    if (activeTabId) closeTab(activeTabId)
   }
 })
 
 // ─── Eventos da webview ───────────────────────────────────────────────────────
 
-webview.addEventListener('did-start-loading', () => {
-  document.body.classList.add('loading')
-  inspectorInjected = false
-  // Ao navegar, desativa inspector
-  if (inspectorActive) deactivateInspector(true)
-})
+function bindWebviewEvents(wv, tabId) {
+  wv.addEventListener('did-start-loading', () => {
+    if (activeTabId === tabId) {
+      document.body.classList.add('loading')
+      inspectorInjected = false
+      if (inspectorActive) deactivateInspector(true)
+    }
+    const t = tabs.find(x => x.id === tabId)
+    if (t) {
+      t.tabEl.querySelector('.tab-title').textContent = 'Carregando...'
+    }
+  })
 
-webview.addEventListener('did-stop-loading', () => {
-  document.body.classList.remove('loading')
-  updateNavButtons()
-})
+  wv.addEventListener('did-stop-loading', () => {
+    if (activeTabId === tabId) {
+      document.body.classList.remove('loading')
+      updateNavButtons()
+      updateStartScreen()
+    }
+    const t = tabs.find(x => x.id === tabId)
+    if (t) {
+      t.tabEl.querySelector('.tab-title').textContent = wv.getTitle() || t.url
+    }
+  })
 
-webview.addEventListener('dom-ready', () => {
-  if (!defaultUserAgent) {
-    defaultUserAgent = webview.getUserAgent()
-  }
-})
+  wv.addEventListener('dom-ready', () => {
+    if (!defaultUserAgent) {
+      defaultUserAgent = wv.getUserAgent()
+    }
+  })
 
-webview.addEventListener('devtools-opened', () => {
-  btnDevtools.classList.add('active')
-})
+  wv.addEventListener('devtools-opened', () => {
+    if (activeTabId === tabId) btnDevtools.classList.add('active')
+  })
 
-webview.addEventListener('devtools-closed', () => {
-  btnDevtools.classList.remove('active')
-})
+  wv.addEventListener('devtools-closed', () => {
+    if (activeTabId === tabId) btnDevtools.classList.remove('active')
+  })
 
-webview.addEventListener('did-navigate', (e) => {
-  urlInput.value = e.url
-  updateNavButtons()
-})
+  wv.addEventListener('did-navigate', (e) => {
+    const t = tabs.find(x => x.id === tabId)
+    if (t) t.url = e.url
+    if (activeTabId === tabId) {
+      urlInput.value = e.url
+      updateNavButtons()
+      updateStartScreen()
+    }
+  })
 
-webview.addEventListener('did-navigate-in-page', (e) => {
-  urlInput.value = e.url
-  updateNavButtons()
-})
+  wv.addEventListener('did-navigate-in-page', (e) => {
+    const t = tabs.find(x => x.id === tabId)
+    if (t) t.url = e.url
+    if (activeTabId === tabId) {
+      urlInput.value = e.url
+      updateNavButtons()
+    }
+  })
 
-webview.addEventListener('page-title-updated', (e) => {
-  document.title = `${e.title} — DevLens`
-})
+  wv.addEventListener('page-title-updated', (e) => {
+    const t = tabs.find(x => x.id === tabId)
+    if (t) t.tabEl.querySelector('.tab-title').textContent = e.title
+    if (activeTabId === tabId) {
+      document.title = `${e.title} — DevLens`
+    }
+  })
 
-function updateNavButtons() {
-  btnBack.disabled    = !webview.canGoBack()
-  btnForward.disabled = !webview.canGoForward()
+  // === NOVO: Tratar nova janela/aba ===
+  wv.addEventListener('new-window', (e) => {
+    // Cria uma aba para a URL solicitada em vez de abrir nova janela do app
+    e.preventDefault()
+    createTab(e.url)
+  })
+
+  wv.addEventListener('ipc-message', async (e) => {
+    if (activeTabId !== tabId) return // Ignora eventos IPC de abas em background
+    handleIpcMessage(e.channel, e.args)
+  })
 }
 
-btnBack.addEventListener('click',   () => { if (webview.canGoBack())    webview.goBack() })
-btnForward.addEventListener('click', () => { if (webview.canGoForward()) webview.goForward() })
-btnReload.addEventListener('click',  () => webview.reloadIgnoringCache())
+function updateNavButtons() {
+  const wv = getActiveWebview()
+  if (!wv) return
+  try {
+    btnBack.disabled    = !wv.canGoBack()
+    btnForward.disabled = !wv.canGoForward()
+  } catch (e) {
+    btnBack.disabled = true
+    btnForward.disabled = true
+  }
+}
+
+btnBack.addEventListener('click',   () => { const wv = getActiveWebview(); if (wv && wv.canGoBack()) wv.goBack() })
+btnForward.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.canGoForward()) wv.goForward() })
+btnReload.addEventListener('click',  () => { const wv = getActiveWebview(); if (wv) wv.reloadIgnoringCache() })
 
 btnClearCache.addEventListener('click', async () => {
-  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+  const wv = getActiveWebview()
+  if (!wv || wv.style.display === 'none' || wv.src === 'about:blank') {
     showToast('⚠️  Carregue uma URL primeiro!', false)
     return
   }
   try {
-    await webview.clearData({
+    await wv.clearData({
       storages: ['appcache', 'cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
     })
-    webview.reloadIgnoringCache()
+    wv.reloadIgnoringCache()
     showToast('Cache apagado e recarregado!', true)
   } catch (err) {
     console.error('Erro ao limpar cache:', err)
@@ -199,7 +386,8 @@ async function getInspectorScript() {
 }
 
 async function activateInspector() {
-  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+  const wv = getActiveWebview()
+  if (!wv || wv.style.display === 'none' || wv.src === 'about:blank' || !wv.src) {
     showToast('⚠️  Carregue uma URL primeiro!', false)
     return
   }
@@ -209,11 +397,10 @@ async function activateInspector() {
   inspectLabel.textContent = 'Inspecionando…'
   infoBar.classList.remove('hidden')
 
-  // Injeta o script se ainda não foi injetado nesta página
   if (!inspectorInjected) {
     const script = await getInspectorScript()
     try {
-      await webview.executeJavaScript(script)
+      await wv.executeJavaScript(script)
       inspectorInjected = true
     } catch (err) {
       console.error('[DevLens] Erro ao injetar inspector:', err)
@@ -223,8 +410,7 @@ async function activateInspector() {
     }
   }
 
-  // Ativa o inspector na página
-  await webview.executeJavaScript('window.devlensStart && window.devlensStart()')
+  await wv.executeJavaScript('window.devlensStart && window.devlensStart()')
 }
 
 function deactivateInspector(silent = false) {
@@ -234,8 +420,9 @@ function deactivateInspector(silent = false) {
   currentFilePath = null
   btnCopyPath.disabled = true
 
-  if (inspectorInjected) {
-    webview.executeJavaScript('window.devlensStop && window.devlensStop()').catch(() => {})
+  const wv = getActiveWebview()
+  if (inspectorInjected && wv) {
+    wv.executeJavaScript('window.devlensStop && window.devlensStop()').catch(() => {})
   }
 
   if (!silent) {
@@ -249,48 +436,46 @@ btnInspect.addEventListener('click', () => {
   else activateInspector()
 })
 
-// Ctrl+I — toggle do inspector
-document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'i') {
-    e.preventDefault()
-    if (inspectorActive) deactivateInspector()
-    else activateInspector()
-  }
-})
-
 // ─── Receber dados do elemento inspecionado via webview IPC ───────────────────
 
-webview.addEventListener('ipc-message', async (e) => {
-  const { channel, args } = e
+function handleIpcMessage(channel, args) {
+  const wv = getActiveWebview()
 
-  // Elemento hoveredado — atualiza a info bar
   if (channel === 'element-info') {
     const info = args[0]
     if (info) updateInfoBar(info)
   }
 
-  // Click no elemento — abre o modal de intenção
   if (channel === 'copy-path') {
     const { file, line, component, tagName, classes } = args[0]
     pendingCopyData = args[0]
+
+    // Se a busca local resolveu o arquivo (e o resultado original era nulo ou URL)
+    const projectPath = localStorage.getItem('devlens_project_path')
+    if (projectPath && component && (!file || file.startsWith('http'))) {
+      if (currentFilePath && !currentFilePath.startsWith('http') && currentFilePath !== 'Buscando no projeto...') {
+        const parts = currentFilePath.split(':')
+        pendingCopyData.file = parts[0]
+        pendingCopyData.line = parts[1] ? parseInt(parts[1]) : null
+      }
+    }
+
     const componentName = component || tagName || 'elemento'
-    const fileLabel = file ? (line ? `${file}:${line}` : file) : 'Arquivo Desconhecido'
+    const fileLabel = pendingCopyData.file ? (pendingCopyData.line ? `${pendingCopyData.file}:${pendingCopyData.line}` : pendingCopyData.file) : 'Arquivo Desconhecido'
     intentElementInfo.textContent = `<${componentName}> em ${fileLabel}`
     
     intentModal.classList.remove('hidden')
     intentInput.focus()
   }
 
-  // Refresh (F5) vindo de dentro da webview
   if (channel === 'webview-f5') {
-    webview.reloadIgnoringCache()
+    if (wv) wv.reloadIgnoringCache()
   }
 
-  // DevTools (F12) vindo de dentro da webview
   if (channel === 'webview-devtools') {
     toggleDevTools()
   }
-})
+}
 
 // ─── Info Bar ─────────────────────────────────────────────────────────────────
 
@@ -313,7 +498,10 @@ function updateInfoBar(info) {
     infoSeparator.classList.add('hidden')
   }
 
-  if (info.filePath) {
+  // Oculta por padrão o botão rápido
+  btnQuickProject.classList.add('hidden')
+
+  if (info.filePath && !info.filePath.startsWith('http')) {
     infoFilepath.textContent = info.filePath
     infoFilepath.style.color = 'var(--accent-cyan)'
     currentFilePath = info.line ? `${info.filePath}:${info.line}` : info.filePath
@@ -326,11 +514,66 @@ function updateInfoBar(info) {
       infoLine.classList.add('hidden')
     }
   } else {
-    infoFilepath.textContent = 'arquivo não identificado'
-    infoFilepath.style.color = 'var(--text-muted)'
-    infoLine.classList.add('hidden')
-    currentFilePath = null
-    btnCopyPath.disabled = true
+    // Se veio sem caminho (ou se é URL temporário HTTP de bundle)
+    const projectPath = localStorage.getItem('devlens_project_path')
+    if (projectPath && info.component) {
+      infoFilepath.textContent = 'Buscando no projeto...'
+      infoFilepath.style.color = 'var(--text-muted)'
+      infoLine.classList.add('hidden')
+      currentFilePath = null
+      btnCopyPath.disabled = true
+
+      window.electronAPI.findComponentFile(projectPath, info.component).then(res => {
+        // Evita condições de corrida garantindo que o componente selecionado ainda é o mesmo
+        if (infoComponent.textContent === `<${info.component}>`) {
+          if (res && res.filePath) {
+            infoFilepath.textContent = res.filePath
+            infoFilepath.style.color = 'var(--accent-cyan)'
+            currentFilePath = res.line ? `${res.filePath}:${res.line}` : res.filePath
+            btnCopyPath.disabled = false
+            
+            if (res.line) {
+              infoLine.textContent = `:${res.line}`
+              infoLine.classList.remove('hidden')
+            } else {
+              infoLine.classList.add('hidden')
+            }
+
+            // Atualiza dados de cópia pendente se for este componente
+            if (pendingCopyData && pendingCopyData.component === info.component) {
+              pendingCopyData.file = res.filePath
+              pendingCopyData.line = res.line
+              const componentName = pendingCopyData.component || pendingCopyData.tagName || 'elemento'
+              intentElementInfo.textContent = `<${componentName}> em ${res.filePath}:${res.line}`
+            }
+          } else {
+            infoFilepath.textContent = 'arquivo não identificado'
+            infoFilepath.style.color = 'var(--text-muted)'
+            infoLine.classList.add('hidden')
+            currentFilePath = null
+            btnCopyPath.disabled = true
+          }
+        }
+      }).catch(err => {
+        console.error(err)
+        infoFilepath.textContent = 'arquivo não identificado'
+        infoFilepath.style.color = 'var(--text-muted)'
+        infoLine.classList.add('hidden')
+        currentFilePath = null
+        btnCopyPath.disabled = true
+      })
+    } else {
+      infoFilepath.textContent = 'arquivo não identificado'
+      infoFilepath.style.color = 'var(--text-muted)'
+      infoLine.classList.add('hidden')
+      currentFilePath = null
+      btnCopyPath.disabled = true
+
+      // Se for um componente react/vue mas não está vinculado, exibe botão rápido
+      if (info.component && (fw === 'react' || fw === 'vue')) {
+        btnQuickProject.classList.remove('hidden')
+      }
+    }
   }
 }
 
@@ -344,6 +587,7 @@ function resetInfoBar() {
   infoLine.classList.add('hidden')
   btnCopyPath.disabled = true
   currentFilePath = null
+  btnQuickProject.classList.add('hidden')
 }
 
 // ─── Copiar Caminho ───────────────────────────────────────────────────────────
@@ -353,7 +597,6 @@ async function doCopyPath(filePath, component) {
 
   await window.electronAPI.copyToClipboard(filePath)
 
-  // Feedback visual no botão
   btnCopyPath.classList.add('success')
   copyBtnLabel.textContent = 'Copiado!'
   setTimeout(() => {
@@ -361,7 +604,6 @@ async function doCopyPath(filePath, component) {
     copyBtnLabel.textContent = 'Copiar Caminho'
   }, 2000)
 
-  // Toast
   const msg = component
     ? `<${component}>  ${filePath}`
     : filePath
@@ -382,7 +624,6 @@ function showToast(message, success = true) {
     : 'rgba(239, 68, 68, 0.4)'
   toast.style.color = success ? 'var(--accent-green)' : '#EF4444'
 
-  // Força reflow para reiniciar a animação
   void toast.offsetWidth
   toast.classList.add('show')
 
@@ -396,43 +637,64 @@ function showToast(message, success = true) {
 // ─── Modo Desenvolvedor & Modo Mobile ─────────────────────────────────────────
 
 function toggleDevTools() {
-  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+  const wv = getActiveWebview()
+  if (!wv || wv.style.display === 'none' || wv.src === 'about:blank') {
     showToast('⚠️  Carregue uma URL primeiro!', false)
     return
   }
 
-  if (webview.isDevToolsOpened()) {
-    webview.closeDevTools()
+  if (wv.isDevToolsOpened()) {
+    wv.closeDevTools()
   } else {
-    webview.openDevTools()
+    wv.openDevTools()
   }
 }
 
-function applyDeviceSettings() {
+function applyDeviceSettingsToWebview(wv) {
+  if (!wv) return
+  if (!mobileModeActive) {
+    wv.style.width = ''
+    wv.style.height = ''
+    wv.style.borderRadius = ''
+    const baseUa = defaultUserAgent || ''
+    if (wv.getUserAgent() !== baseUa) {
+      wv.setUserAgent(baseUa)
+      // Recarrega apenas se necessário, mas na criação da aba pode não estar pronto
+      try { wv.reloadIgnoringCache() } catch(e){}
+    }
+    return
+  }
+
   const device = devices[deviceSelector.value]
   if (!device) return
 
   if (device.width === '100%') {
-    webview.style.width = '100%'
-    webview.style.height = '100%'
-    webview.style.borderRadius = '0'
+    wv.style.width = '100%'
+    wv.style.height = '100%'
+    wv.style.borderRadius = '0'
   } else {
-    webview.style.width = device.width
-    webview.style.height = device.height
-    webview.style.borderRadius = 'var(--radius-lg)'
+    wv.style.width = device.width
+    wv.style.height = device.height
+    wv.style.borderRadius = 'var(--radius-lg)'
   }
 
   const newUa = device.ua || defaultUserAgent || ''
-  if (webview.getUserAgent() !== newUa) {
-    webview.setUserAgent(newUa)
-    webview.reloadIgnoringCache()
+  if (wv.getUserAgent() !== newUa) {
+    wv.setUserAgent(newUa)
+    try { wv.reloadIgnoringCache() } catch(e){}
   }
+}
+
+function applyDeviceSettings() {
+  const wv = getActiveWebview()
+  applyDeviceSettingsToWebview(wv)
 }
 
 deviceSelector.addEventListener('change', applyDeviceSettings)
 
 function toggleMobileMode() {
-  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+  const wv = getActiveWebview()
+  if (!wv || wv.style.display === 'none' || wv.src === 'about:blank') {
     showToast('⚠️  Carregue uma URL primeiro!', false)
     return
   }
@@ -443,23 +705,14 @@ function toggleMobileMode() {
     btnMobile.classList.add('active')
     webviewContainer.classList.add('mobile-mode')
     deviceSelectorWrapper.classList.remove('hidden')
-    applyDeviceSettings()
+    
+    // Aplica para a webview atual, as outras herdam quando forem ativadas
+    applyDeviceSettingsToWebview(wv)
   } else {
     btnMobile.classList.remove('active')
     webviewContainer.classList.remove('mobile-mode')
     deviceSelectorWrapper.classList.add('hidden')
-    
-    // Reset visual dimensions
-    webview.style.width = ''
-    webview.style.height = ''
-    webview.style.borderRadius = ''
-
-    // Reset User Agent
-    const baseUa = defaultUserAgent || ''
-    if (webview.getUserAgent() !== baseUa) {
-      webview.setUserAgent(baseUa)
-      webview.reloadIgnoringCache()
-    }
+    applyDeviceSettingsToWebview(wv)
   }
 }
 
@@ -504,11 +757,9 @@ btnIntentConfirm.addEventListener('click', async () => {
     prompt += `\n\nPreciso que você ajuste o estilo deste componente.`
   }
   
-  // Usa a API electron para copiar direto e exibe toast de prompt
   await window.electronAPI.copyToClipboard(prompt)
   showToast('✨ Mini-Prompt Copiado para a IA!', true)
 
-  // Atualiza o botão da barra também
   btnCopyPath.classList.add('success')
   const copyBtnLabel = document.getElementById('copy-btn-label')
   copyBtnLabel.textContent = 'Prompt Copiado!'
@@ -527,3 +778,63 @@ intentInput.addEventListener('keydown', (e) => {
     hideIntentModal()
   }
 })
+
+// ─── Lógica de Vinculação de Pasta do Projeto ─────────────────────────────────
+
+function updateProjectFolderUI(folderPath) {
+  if (folderPath) {
+    btnProject.classList.add('linked')
+    const folderName = folderPath.replace(/\\/g, '/').split('/').pop() || folderPath
+    projectLabel.textContent = folderName
+    btnProject.title = `Projeto: ${folderPath}\nClique para alterar ou desvincular.`
+  } else {
+    btnProject.classList.remove('linked')
+    projectLabel.textContent = 'Vincular Pasta'
+    btnProject.title = 'Vincular pasta do projeto local para autodetecção de arquivos em React 19'
+  }
+}
+
+btnProject.addEventListener('click', async () => {
+  const currentPath = localStorage.getItem('devlens_project_path')
+  if (currentPath) {
+    const choice = confirm(`Pasta atual: ${currentPath}\n\nDeseja alterar a pasta do projeto?\nClique em "OK" para selecionar uma nova pasta ou "Cancelar" para desvincular a pasta atual.`)
+    if (choice) {
+      const folderPath = await window.electronAPI.selectProjectFolder()
+      if (folderPath) {
+        localStorage.setItem('devlens_project_path', folderPath)
+        updateProjectFolderUI(folderPath)
+        showToast(`Pasta vinculada: ${folderPath}`, true)
+      }
+    } else {
+      localStorage.removeItem('devlens_project_path')
+      updateProjectFolderUI(null)
+      showToast('Pasta do projeto desvinculada.', true)
+    }
+  } else {
+    const folderPath = await window.electronAPI.selectProjectFolder()
+    if (folderPath) {
+      localStorage.setItem('devlens_project_path', folderPath)
+      updateProjectFolderUI(folderPath)
+      showToast(`Pasta vinculada: ${folderPath}`, true)
+    }
+  }
+})
+
+btnQuickProject.addEventListener('click', async () => {
+  const folderPath = await window.electronAPI.selectProjectFolder()
+  if (folderPath) {
+    localStorage.setItem('devlens_project_path', folderPath)
+    updateProjectFolderUI(folderPath)
+    showToast(`Pasta vinculada: ${folderPath}`, true)
+    btnQuickProject.classList.add('hidden')
+  }
+})
+
+// ─── Inicialização ────────────────────────────────────────────────────────────
+
+// Carrega pasta do projeto vinculada do localStorage
+const savedProjectPath = localStorage.getItem('devlens_project_path')
+updateProjectFolderUI(savedProjectPath)
+
+// Cria a primeira aba vazia ao iniciar
+createTab()

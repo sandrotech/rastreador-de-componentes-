@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
+
+  // Novo: APIs de Projeto e Busca de Componente
+  selectProjectFolder: () => ipcRenderer.invoke('select-project-folder'),
+  findComponentFile: (projectPath, componentName) => ipcRenderer.invoke('find-component-file', { projectPath, componentName }),
 })
