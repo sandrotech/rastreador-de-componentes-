@@ -78,6 +78,45 @@
       <span id="inspect-label">Inspecionar</span>
       <span id="inspect-indicator"></span>
     </button>
+
+    <!-- Mobile Mode -->
+    <button id="btn-mobile" title="Modo Mobile">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+        <line x1="12" y1="18" x2="12.01" y2="18"/>
+      </svg>
+      <span>Mobile</span>
+    </button>
+
+    <!-- Device Selector (Hidden by default) -->
+    <div id="device-selector-wrapper" class="hidden">
+      <select id="device-selector">
+        <option value="responsive">Responsive</option>
+        <optgroup label="iOS">
+          <option value="iphone-se">iPhone SE (375x667)</option>
+          <option value="iphone-xr">iPhone XR (414x896)</option>
+          <option value="iphone-12-pro">iPhone 12 Pro (390x844)</option>
+          <option value="iphone-14-pro-max">iPhone 14 Pro Max (430x932)</option>
+          <option value="ipad-mini">iPad Mini (768x1024)</option>
+          <option value="ipad-air">iPad Air (820x1180)</option>
+          <option value="ipad-pro">iPad Pro (1024x1366)</option>
+        </optgroup>
+        <optgroup label="Android">
+          <option value="pixel-7">Pixel 7 (412x915)</option>
+          <option value="samsung-s8">Samsung Galaxy S8+ (360x740)</option>
+          <option value="samsung-s20">Samsung Galaxy S20 Ultra (412x915)</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- Developer Mode -->
+    <button id="btn-devtools" title="Modo Desenvolvedor (F12)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+      </svg>
+      <span>DevTools</span>
+    </button>
   </div>
 
   <!-- ── Webview ─────────────────────────────────────────────────────────── -->
@@ -109,12 +148,13 @@
       </div>
     </div>
 
-    <webview
-      id="webview"
-      src="about:blank"
-      allowpopups
-      disablewebsecurity
-    ></webview>
+    <webview 
+      id="webview" 
+      src="about:blank" 
+      allowpopups 
+      nodeintegration="false"
+      webpreferences="contextIsolation=true, sandbox=true">
+    </webview>
   </div>
 
   <!-- ── Info Bar (aparece quando elemento é inspecionado) ──────────────── -->
@@ -140,6 +180,20 @@
   <div id="toast" class="hidden">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
     <span id="toast-message">Caminho copiado!</span>
+  </div>
+
+  <!-- ── Modal de Intenção ──────────────────────────────────────────────── -->
+  <div id="intent-modal" class="hidden">
+    <div id="intent-modal-backdrop"></div>
+    <div id="intent-modal-content">
+      <h2>O que deseja alterar?</h2>
+      <p id="intent-modal-element-info"></p>
+      <input type="text" id="intent-input" placeholder="Ex: Quero que retire essa coluna do footer" autocomplete="off" />
+      <div id="intent-modal-actions">
+        <button id="btn-intent-cancel" class="btn-cancel">Cancelar</button>
+        <button id="btn-intent-confirm" class="btn-primary">Copiar Prompt</button>
+      </div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

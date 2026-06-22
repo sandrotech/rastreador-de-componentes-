@@ -209,6 +209,64 @@ input  { border: none; outline: none; background: none; color: inherit; font: in
   50%       { opacity: 0.5; transform: scale(0.7); }
 }
 
+/* Mobile & Devtools Buttons */
+#btn-mobile, #btn-devtools {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+#btn-mobile:hover, #btn-devtools:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.4);
+  color: var(--text-primary);
+}
+#btn-mobile.active {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+}
+#btn-devtools.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+/* Device Selector */
+#device-selector-wrapper {
+  display: flex;
+  align-items: center;
+}
+#device-selector-wrapper.hidden {
+  display: none !important;
+}
+#device-selector {
+  height: 34px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+#device-selector:focus {
+  border-color: var(--border-focus);
+}
+
 /* ─── Webview Container ──────────────────────────────────────────────────── */
 #webview-container {
   position: relative;
@@ -217,6 +275,21 @@ input  { border: none; outline: none; background: none; color: inherit; font: in
   background: var(--bg-base);
   display: flex;
   flex-direction: column;
+  transition: padding 0.3s ease, background-color 0.3s ease;
+}
+
+#webview-container.mobile-mode {
+  background-color: #0d0d14;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 24px;
+  overflow: auto;
+}
+
+#webview-container.mobile-mode::before,
+#webview-container.mobile-mode::after {
+  content: '';
+  flex: 1;
 }
 
 #webview {
@@ -224,6 +297,17 @@ input  { border: none; outline: none; background: none; color: inherit; font: in
   width: 100%;
   border: none;
   display: none; /* hidden until URL is loaded */
+  transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease, box-shadow 0.3s ease;
+}
+
+#webview-container.mobile-mode #webview {
+  flex: none;
+  /* width and height are dynamically set by renderer.js */
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  background: #000;
 }
 
 /* ─── Start Screen ───────────────────────────────────────────────────────── */
@@ -456,3 +540,114 @@ body {
 
 /* ─── Loading state ──────────────────────────────────────────────────────── */
 .loading #url-bar-wrapper { border-color: rgba(124, 58, 237, 0.4); }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+body.loading #btn-reload svg {
+  animation: spin 1s linear infinite;
+  color: var(--accent-purple);
+}
+
+/* ─── Intent Modal ───────────────────────────────────────────────────────── */
+#intent-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#intent-modal.hidden {
+  display: none;
+}
+#intent-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+#intent-modal-content {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 440px;
+  max-width: 90%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: modal-in 0.2s ease;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+#intent-modal-content h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+#intent-modal-element-info {
+  font-size: 13px;
+  color: var(--accent-cyan);
+  background: var(--bg-elevated);
+  padding: 10px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+#intent-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  width: 100%;
+  transition: var(--transition);
+}
+#intent-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+#intent-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+#intent-modal-actions button {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: var(--transition);
+}
+.btn-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-cancel:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.btn-primary {
+  background: var(--accent-purple);
+  color: white;
+  border: 1px solid transparent;
+}
+.btn-primary:hover {
+  background: #6D28D9;
+}

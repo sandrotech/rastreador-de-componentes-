@@ -249,11 +249,20 @@
     const info = getElementInfo(currentElement)
 
     if (info?.filePath && window.__devlens_bridge__) {
+      let classes = ''
+      if (typeof currentElement.className === 'string') {
+        classes = currentElement.className
+      } else if (currentElement.className && currentElement.className.baseVal) {
+        classes = currentElement.className.baseVal
+      }
+
       window.__devlens_bridge__.sendCopy({
         file: info.filePath,
         line: info.line || null,
         component: info.component || null,
         framework: info.framework,
+        tagName: currentElement.tagName.toLowerCase(),
+        classes: classes
       })
     }
   }

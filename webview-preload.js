@@ -36,4 +36,14 @@ ipcRenderer.on('inspector-command', (_event, { action }) => {
   window.dispatchEvent(new CustomEvent('devlens-command', { detail: { action } }))
 })
 
+// Escuta atalhos de teclado de refresh (F5) e devtools (F12, Ctrl+Shift+I) na webview
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'F5') {
+    ipcRenderer.sendToHost('webview-f5')
+  } else if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I') || (e.ctrlKey && e.shiftKey && e.key === 'i')) {
+    ipcRenderer.sendToHost('webview-devtools')
+  }
+})
+
 console.log('[DevLens] webview-preload carregado.')
+

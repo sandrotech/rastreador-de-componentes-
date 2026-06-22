@@ -22,6 +22,11 @@ const btnForward    = document.getElementById('btn-forward')
 const btnReload     = document.getElementById('btn-reload')
 const btnInspect    = document.getElementById('btn-inspect')
 const inspectLabel  = document.getElementById('inspect-label')
+const btnMobile     = document.getElementById('btn-mobile')
+const deviceSelectorWrapper = document.getElementById('device-selector-wrapper')
+const deviceSelector = document.getElementById('device-selector')
+const btnDevtools   = document.getElementById('btn-devtools')
+const webviewContainer = document.getElementById('webview-container')
 
 const infoBar          = document.getElementById('info-bar')
 const infoFramework    = document.getElementById('info-framework-badge')
@@ -35,6 +40,12 @@ const copyBtnLabel     = document.getElementById('copy-btn-label')
 const toast        = document.getElementById('toast')
 const toastMessage = document.getElementById('toast-message')
 
+const intentModal = document.getElementById('intent-modal')
+const intentInput = document.getElementById('intent-input')
+const intentElementInfo = document.getElementById('intent-modal-element-info')
+const btnIntentCancel = document.getElementById('btn-intent-cancel')
+const btnIntentConfirm = document.getElementById('btn-intent-confirm')
+
 // ─── Estado ──────────────────────────────────────────────────────────────────
 
 let inspectorActive = false
@@ -42,6 +53,23 @@ let inspectorInjected = false
 let inspectorScript = null
 let currentFilePath = null
 let toastTimer = null
+
+let defaultUserAgent = ''
+let mobileModeActive = false
+
+const devices = {
+  'responsive': { width: '100%', height: '100%', ua: '' },
+  'iphone-se': { width: '375px', height: '667px', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1' },
+  'iphone-xr': { width: '414px', height: '896px', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1' },
+  'iphone-12-pro': { width: '390px', height: '844px', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1' },
+  'iphone-14-pro-max': { width: '430px', height: '932px', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1' },
+  'ipad-mini': { width: '768px', height: '1024px', ua: 'Mozilla/5.0 (iPad; CPU OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1' },
+  'ipad-air': { width: '820px', height: '1180px', ua: 'Mozilla/5.0 (iPad; CPU OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1' },
+  'ipad-pro': { width: '1024px', height: '1366px', ua: 'Mozilla/5.0 (iPad; CPU OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1' },
+  'pixel-7': { width: '412px', height: '915px', ua: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36' },
+  'samsung-s8': { width: '360px', height: '740px', ua: 'Mozilla/5.0 (Linux; Android 8.0.0; SM-G955U Build/R16NW) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36' },
+  'samsung-s20': { width: '412px', height: '915px', ua: 'Mozilla/5.0 (Linux; Android 10; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36' }
+}
 
 // ─── Controles da janela (custom title bar) ───────────────────────────────────
 
@@ -78,9 +106,15 @@ urlInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') navigate(urlInput.value)
 })
 
-// Foca a URL bar com Ctrl+L
+// Atalhos globais de teclado (F5, F12, Ctrl+Shift+I, Ctrl+L)
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'l') {
+  if (e.key === 'F5') {
+    e.preventDefault()
+    webview.reloadIgnoringCache()
+  } else if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I') || (e.ctrlKey && e.shiftKey && e.key === 'i')) {
+    e.preventDefault()
+    toggleDevTools()
+  } else if (e.ctrlKey && e.key === 'l') {
     e.preventDefault()
     urlInput.select()
   }
@@ -98,6 +132,20 @@ webview.addEventListener('did-start-loading', () => {
 webview.addEventListener('did-stop-loading', () => {
   document.body.classList.remove('loading')
   updateNavButtons()
+})
+
+webview.addEventListener('dom-ready', () => {
+  if (!defaultUserAgent) {
+    defaultUserAgent = webview.getUserAgent()
+  }
+})
+
+webview.addEventListener('devtools-opened', () => {
+  btnDevtools.classList.add('active')
+})
+
+webview.addEventListener('devtools-closed', () => {
+  btnDevtools.classList.remove('active')
 })
 
 webview.addEventListener('did-navigate', (e) => {
@@ -121,7 +169,7 @@ function updateNavButtons() {
 
 btnBack.addEventListener('click',   () => { if (webview.canGoBack())    webview.goBack() })
 btnForward.addEventListener('click', () => { if (webview.canGoForward()) webview.goForward() })
-btnReload.addEventListener('click',  () => webview.reload())
+btnReload.addEventListener('click',  () => webview.reloadIgnoringCache())
 
 // ─── Inspector — Ativar/Desativar ─────────────────────────────────────────────
 
@@ -203,12 +251,28 @@ webview.addEventListener('ipc-message', async (e) => {
     if (info) updateInfoBar(info)
   }
 
-  // Click no elemento — copia o caminho
+  // Click no elemento — abre o modal de intenção
   if (channel === 'copy-path') {
-    const { file, line, component } = args[0]
+    const { file, line, component, tagName, classes } = args[0]
     if (file) {
-      await doCopyPath(file, component)
+      pendingCopyData = args[0]
+      const componentName = component || tagName || 'elemento'
+      const fileLabel = line ? `${file}:${line}` : file
+      intentElementInfo.textContent = `<${componentName}> em ${fileLabel}`
+      
+      intentModal.classList.remove('hidden')
+      intentInput.focus()
     }
+  }
+
+  // Refresh (F5) vindo de dentro da webview
+  if (channel === 'webview-f5') {
+    webview.reloadIgnoringCache()
+  }
+
+  // DevTools (F12) vindo de dentro da webview
+  if (channel === 'webview-devtools') {
+    toggleDevTools()
   }
 })
 
@@ -236,7 +300,7 @@ function updateInfoBar(info) {
   if (info.filePath) {
     infoFilepath.textContent = info.filePath
     infoFilepath.style.color = 'var(--accent-cyan)'
-    currentFilePath = info.filePath
+    currentFilePath = info.line ? `${info.filePath}:${info.line}` : info.filePath
     btnCopyPath.disabled = false
 
     if (info.line) {
@@ -312,3 +376,134 @@ function showToast(message, success = true) {
     toast.classList.add('hidden')
   }, 2200)
 }
+
+// ─── Modo Desenvolvedor & Modo Mobile ─────────────────────────────────────────
+
+function toggleDevTools() {
+  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+    showToast('⚠️  Carregue uma URL primeiro!', false)
+    return
+  }
+
+  if (webview.isDevToolsOpened()) {
+    webview.closeDevTools()
+  } else {
+    webview.openDevTools()
+  }
+}
+
+function applyDeviceSettings() {
+  const device = devices[deviceSelector.value]
+  if (!device) return
+
+  if (device.width === '100%') {
+    webview.style.width = '100%'
+    webview.style.height = '100%'
+    webview.style.borderRadius = '0'
+  } else {
+    webview.style.width = device.width
+    webview.style.height = device.height
+    webview.style.borderRadius = 'var(--radius-lg)'
+  }
+
+  const newUa = device.ua || defaultUserAgent || ''
+  if (webview.getUserAgent() !== newUa) {
+    webview.setUserAgent(newUa)
+    webview.reloadIgnoringCache()
+  }
+}
+
+deviceSelector.addEventListener('change', applyDeviceSettings)
+
+function toggleMobileMode() {
+  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+    showToast('⚠️  Carregue uma URL primeiro!', false)
+    return
+  }
+
+  mobileModeActive = !mobileModeActive
+
+  if (mobileModeActive) {
+    btnMobile.classList.add('active')
+    webviewContainer.classList.add('mobile-mode')
+    deviceSelectorWrapper.classList.remove('hidden')
+    applyDeviceSettings()
+  } else {
+    btnMobile.classList.remove('active')
+    webviewContainer.classList.remove('mobile-mode')
+    deviceSelectorWrapper.classList.add('hidden')
+    
+    // Reset visual dimensions
+    webview.style.width = ''
+    webview.style.height = ''
+    webview.style.borderRadius = ''
+
+    // Reset User Agent
+    const baseUa = defaultUserAgent || ''
+    if (webview.getUserAgent() !== baseUa) {
+      webview.setUserAgent(baseUa)
+      webview.reloadIgnoringCache()
+    }
+  }
+}
+
+btnDevtools.addEventListener('click', toggleDevTools)
+btnMobile.addEventListener('click', toggleMobileMode)
+
+// ─── Lógica do Modal de Intenção ──────────────────────────────────────────────
+
+let pendingCopyData = null
+
+function hideIntentModal() {
+  intentModal.classList.add('hidden')
+  pendingCopyData = null
+  intentInput.value = ''
+}
+
+btnIntentCancel.addEventListener('click', hideIntentModal)
+
+btnIntentConfirm.addEventListener('click', async () => {
+  if (!pendingCopyData) return
+  const { file, line, component, tagName, classes } = pendingCopyData
+  const intent = intentInput.value.trim()
+  
+  if (file) {
+    let prompt = `No arquivo \`${file}\``
+    if (line) prompt += ` (linha ${line})`
+    prompt += `, temos o elemento \`<${component || tagName}>\``
+    
+    if (classes && typeof classes === 'string' && classes.trim().length > 0) {
+      prompt += ` com as classes \`${classes.trim()}\`.`
+    } else {
+      prompt += `.`
+    }
+    
+    if (intent) {
+      prompt += `\n\nPreciso que você ajuste este componente: ${intent}`
+    } else {
+      prompt += `\n\nPreciso que você ajuste o estilo deste componente.`
+    }
+    
+    // Usa a API electron para copiar direto e exibe toast de prompt
+    await window.electronAPI.copyToClipboard(prompt)
+    showToast('✨ Mini-Prompt Copiado para a IA!', true)
+
+    // Atualiza o botão da barra também
+    btnCopyPath.classList.add('success')
+    const copyBtnLabel = document.getElementById('copy-btn-label')
+    copyBtnLabel.textContent = 'Prompt Copiado!'
+    setTimeout(() => {
+      btnCopyPath.classList.remove('success')
+      copyBtnLabel.textContent = 'Copiar Caminho'
+    }, 2000)
+  }
+  hideIntentModal()
+})
+
+intentInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    btnIntentConfirm.click()
+  } else if (e.key === 'Escape') {
+    hideIntentModal()
+  }
+})

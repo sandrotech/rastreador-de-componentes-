@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, clipboard, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
+// Desabilita totalmente o cache HTTP para evitar cachear arquivos de desenvolvimento
+app.commandLine.appendSwitch('disable-http-cache')
+
 let mainWindow
 
 function createWindow() {
