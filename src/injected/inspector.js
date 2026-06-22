@@ -248,7 +248,7 @@
     if (!currentElement) return
     const info = getElementInfo(currentElement)
 
-    if (info?.filePath && window.__devlens_bridge__) {
+    if (window.__devlens_bridge__) {
       let classes = ''
       if (typeof currentElement.className === 'string') {
         classes = currentElement.className
@@ -257,10 +257,10 @@
       }
 
       window.__devlens_bridge__.sendCopy({
-        file: info.filePath,
-        line: info.line || null,
-        component: info.component || null,
-        framework: info.framework,
+        file: info?.filePath || null,
+        line: info?.line || null,
+        component: info?.component || null,
+        framework: info?.framework || 'html',
         tagName: currentElement.tagName.toLowerCase(),
         classes: classes
       })

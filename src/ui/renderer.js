@@ -20,6 +20,7 @@ const btnGo         = document.getElementById('btn-go')
 const btnBack       = document.getElementById('btn-back')
 const btnForward    = document.getElementById('btn-forward')
 const btnReload     = document.getElementById('btn-reload')
+const btnClearCache = document.getElementById('btn-clear-cache')
 const btnInspect    = document.getElementById('btn-inspect')
 const inspectLabel  = document.getElementById('inspect-label')
 const btnMobile     = document.getElementById('btn-mobile')
@@ -171,6 +172,23 @@ btnBack.addEventListener('click',   () => { if (webview.canGoBack())    webview.
 btnForward.addEventListener('click', () => { if (webview.canGoForward()) webview.goForward() })
 btnReload.addEventListener('click',  () => webview.reloadIgnoringCache())
 
+btnClearCache.addEventListener('click', async () => {
+  if (webview.style.display === 'none' || webview.src === 'about:blank') {
+    showToast('⚠️  Carregue uma URL primeiro!', false)
+    return
+  }
+  try {
+    await webview.clearData({
+      storages: ['appcache', 'cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
+    })
+    webview.reloadIgnoringCache()
+    showToast('Cache apagado e recarregado!', true)
+  } catch (err) {
+    console.error('Erro ao limpar cache:', err)
+    showToast('Erro ao limpar cache.', false)
+  }
+})
+
 // ─── Inspector — Ativar/Desativar ─────────────────────────────────────────────
 
 async function getInspectorScript() {
@@ -254,15 +272,13 @@ webview.addEventListener('ipc-message', async (e) => {
   // Click no elemento — abre o modal de intenção
   if (channel === 'copy-path') {
     const { file, line, component, tagName, classes } = args[0]
-    if (file) {
-      pendingCopyData = args[0]
-      const componentName = component || tagName || 'elemento'
-      const fileLabel = line ? `${file}:${line}` : file
-      intentElementInfo.textContent = `<${componentName}> em ${fileLabel}`
-      
-      intentModal.classList.remove('hidden')
-      intentInput.focus()
-    }
+    pendingCopyData = args[0]
+    const componentName = component || tagName || 'elemento'
+    const fileLabel = file ? (line ? `${file}:${line}` : file) : 'Arquivo Desconhecido'
+    intentElementInfo.textContent = `<${componentName}> em ${fileLabel}`
+    
+    intentModal.classList.remove('hidden')
+    intentInput.focus()
   }
 
   // Refresh (F5) vindo de dentro da webview
@@ -467,36 +483,40 @@ btnIntentConfirm.addEventListener('click', async () => {
   const { file, line, component, tagName, classes } = pendingCopyData
   const intent = intentInput.value.trim()
   
+  let prompt = ''
   if (file) {
-    let prompt = `No arquivo \`${file}\``
+    prompt += `No arquivo \`${file}\``
     if (line) prompt += ` (linha ${line})`
     prompt += `, temos o elemento \`<${component || tagName}>\``
-    
-    if (classes && typeof classes === 'string' && classes.trim().length > 0) {
-      prompt += ` com as classes \`${classes.trim()}\`.`
-    } else {
-      prompt += `.`
-    }
-    
-    if (intent) {
-      prompt += `\n\nPreciso que você ajuste este componente: ${intent}`
-    } else {
-      prompt += `\n\nPreciso que você ajuste o estilo deste componente.`
-    }
-    
-    // Usa a API electron para copiar direto e exibe toast de prompt
-    await window.electronAPI.copyToClipboard(prompt)
-    showToast('✨ Mini-Prompt Copiado para a IA!', true)
-
-    // Atualiza o botão da barra também
-    btnCopyPath.classList.add('success')
-    const copyBtnLabel = document.getElementById('copy-btn-label')
-    copyBtnLabel.textContent = 'Prompt Copiado!'
-    setTimeout(() => {
-      btnCopyPath.classList.remove('success')
-      copyBtnLabel.textContent = 'Copiar Caminho'
-    }, 2000)
+  } else {
+    prompt += `Temos um elemento \`<${component || tagName}>\``
   }
+  
+  if (classes && typeof classes === 'string' && classes.trim().length > 0) {
+    prompt += ` com as classes \`${classes.trim()}\`.`
+  } else {
+    prompt += `.`
+  }
+  
+  if (intent) {
+    prompt += `\n\nPreciso que você ajuste este componente: ${intent}`
+  } else {
+    prompt += `\n\nPreciso que você ajuste o estilo deste componente.`
+  }
+  
+  // Usa a API electron para copiar direto e exibe toast de prompt
+  await window.electronAPI.copyToClipboard(prompt)
+  showToast('✨ Mini-Prompt Copiado para a IA!', true)
+
+  // Atualiza o botão da barra também
+  btnCopyPath.classList.add('success')
+  const copyBtnLabel = document.getElementById('copy-btn-label')
+  copyBtnLabel.textContent = 'Prompt Copiado!'
+  setTimeout(() => {
+    btnCopyPath.classList.remove('success')
+    copyBtnLabel.textContent = 'Copiar Caminho'
+  }, 2000)
+
   hideIntentModal()
 })
 
